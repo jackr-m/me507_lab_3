@@ -1,0 +1,14 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+rustflags = [
+    "-C", "link-arg=-nmagic",
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Tdefmt.x",
+    "--cfg=force_disable_atomic64"
+] # these flags are required to make the linker script work for the Blackpill (not required for NUCLEO-L476RG)
+runner = "probe-rs run --connect-under-reset --chip STM32F411CEUx"
+
+[build]
+target = "thumbv7em-none-eabihf"
+
+[env]
+DEFMT_LOG = "info"
