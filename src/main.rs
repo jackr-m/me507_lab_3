@@ -6,13 +6,13 @@
 
 use defmt::*; // if info!() or other debug macros are used
 use embassy_executor::Spawner;
-use embassy_time::Timer;
-use embassy_stm32::gpio::{AnyPin, Level, Output, OutputType, Pin, Speed};
+use embassy_time::{Duration, Instant, Timer};
+use embassy_stm32::gpio::{AnyPin, Input, Level, Output, OutputType, Pin, Pull, Speed};
 use embassy_stm32::time::khz;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_stm32::timer::{Channel, OutputPolarity};
 use embassy_stm32::usart::{Config, Uart};
-use embassy_stm32::{bind_interrupts, peripherals, usart};
+use embassy_stm32::{bind_interrupts, Peripheral, peripherals, Peripherals, usart};
 use embassy_stm32::peripherals::TIM1;
 use heapless::String;
 use core::fmt::Write;
@@ -39,10 +39,12 @@ use core::sync::atomic::Ordering;
 use atomic_float::AtomicF32;
 static LED_SPEED_SHARE: AtomicF32 = AtomicF32::new(0.0);
 
-// use core::sync::atomic::AtomicI16;
+use core::sync::atomic::AtomicI16;
+use embassy_stm32::exti::{AnyChannel, ExtiInput};
+use embassy_stm32::exti::Channel as ExtiChannel; // to avoid confusion with the PWM Channel
 
-// static DUTY_A: AtomicI16 = AtomicI16::new(0);
-// static DUTY_B: AtomicI16 = AtomicI16::new(0);
+static DUTY_A: AtomicI16 = AtomicI16::new(0);
+static DUTY_B: AtomicI16 = AtomicI16::new(0);
 
 bind_interrupts!(struct Irqs {
     USART1 => usart::InterruptHandler<peripherals::USART1>;
@@ -83,7 +85,11 @@ async fn main(spawner: Spawner) {
     core::writeln!(&mut s, "Starting Program...\r").unwrap();
     unwrap!(usart.write(s.as_bytes()).await);
     s.clear();
+    
     spawner.spawn(blinky(p.PC13.degrade())).unwrap();
+    spawner.spawn(remote_ch(p.PA0.degrade(), p.EXTI0.degrade(), 'a')).unwrap();
+    spawner.spawn(remote_ch(p.PA1.degrade(), p.EXTI1.degrade(), 'b')).unwrap();
+    
     enable_motor(&mut pwm_a, 'a');
     enable_motor(&mut pwm_b, 'b');
 
@@ -97,7 +103,7 @@ async fn main(spawner: Spawner) {
     let mut msg: [u8; 4] = [0; 4];
     let mut index = 0usize;
     loop {
-        unwrap!(usart.read(&mut current_char).await);
+        /*unwrap!(usart.read(&mut current_char).await);
         if index > 2 {
             index = 3;
         }
@@ -149,16 +155,46 @@ async fn main(spawner: Spawner) {
             unwrap!(usart.write("\r".as_ref()).await);
             // unwrap!(usart.write(&backspace).await);
             unwrap!(usart.write(&msg).await);
-        }
-
+        }*/
+        set_motor_duty(&mut pwm_a, 'a', DUTY_A.load(Ordering::Acquire));
+        set_motor_duty(&mut pwm_b, 'b', DUTY_B.load(Ordering::Acquire));
+        Timer::after_millis(50).await;
     }
 
 }
 
+#[embassy_executor::task]
+async fn remote_ch(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
+    let pin = Input::new(pin, Pull::None);
+    let mut pin = ExtiInput::new(pin, exti_ch);
+    loop {
+        pin.wait_for_rising_edge().await;
+        let inst = Instant::now();
+        pin.wait_for_falling_edge().await;
+        let duration = Instant::checked_duration_since(&Instant::now(), inst).unwrap().as_micros();
+        if duration < 20_000 {
+            if motor == 'a' {
+                DUTY_A.store(-100, Ordering::Release);
+            } else {
+                DUTY_B.store(-100, Ordering::Release);
+            }
+        } else if duration > 20_000{
+            if motor == 'a' {
+                DUTY_A.store(100, Ordering::Release);
+            } else {
+                DUTY_B.store(100, Ordering::Release);
+            }
+        } else if motor == 'a' {
+            DUTY_A.store(0, Ordering::Release);
+        } else {
+            DUTY_B.store(0, Ordering::Release);
+        }
+    }
+}
 
 #[embassy_executor::task]
-async fn blinky(p: AnyPin) {
-    let mut led = Output::new(p, Level::Low, Speed::Low);
+async fn blinky(pin: AnyPin) {
+    let mut led = Output::new(pin, Level::Low, Speed::Low);
 
     loop {
         let speed = LED_SPEED_SHARE.load(Ordering::Acquire); // Get the current speed from the shared resource
