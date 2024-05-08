@@ -46,6 +46,11 @@ use embassy_stm32::exti::Channel as ExtiChannel; // to avoid confusion with the 
 static DUTY_A: AtomicI16 = AtomicI16::new(0);
 static DUTY_B: AtomicI16 = AtomicI16::new(0);
 
+use core::sync::atomic::AtomicU32;
+static DURATION_A: AtomicU32 = AtomicU32::new(0);
+static DURATION_B: AtomicU32 = AtomicU32::new(0);
+
+
 bind_interrupts!(struct Irqs {
     USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
@@ -89,6 +94,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(blinky(p.PC13.degrade())).unwrap();
     spawner.spawn(remote_ch(p.PA0.degrade(), p.EXTI0.degrade(), 'a')).unwrap();
     spawner.spawn(remote_ch(p.PA1.degrade(), p.EXTI1.degrade(), 'b')).unwrap();
+    spawner.spawn(print_durations()).unwrap();
     
     enable_motor(&mut pwm_a, 'a');
     enable_motor(&mut pwm_b, 'b');
@@ -160,7 +166,15 @@ async fn main(spawner: Spawner) {
         set_motor_duty(&mut pwm_b, 'b', DUTY_B.load(Ordering::Acquire));
         Timer::after_millis(50).await;
     }
+}
 
+#[embassy_executor::task]
+async fn print_durations() {
+    loop {
+        info!("Duration A: {} us", DURATION_A.load(Ordering::Acquire));
+        info!("Duration B: {} us", DURATION_B.load(Ordering::Acquire));
+        Timer::after_secs(2).await;
+    }
 }
 
 #[embassy_executor::task]
@@ -172,22 +186,10 @@ async fn remote_ch(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
         let inst = Instant::now();
         pin.wait_for_falling_edge().await;
         let duration = Instant::checked_duration_since(&Instant::now(), inst).unwrap().as_micros();
-        if duration < 20_000 {
-            if motor == 'a' {
-                DUTY_A.store(-100, Ordering::Release);
-            } else {
-                DUTY_B.store(-100, Ordering::Release);
-            }
-        } else if duration > 20_000{
-            if motor == 'a' {
-                DUTY_A.store(100, Ordering::Release);
-            } else {
-                DUTY_B.store(100, Ordering::Release);
-            }
-        } else if motor == 'a' {
-            DUTY_A.store(0, Ordering::Release);
+        if motor == 'a' {
+            DURATION_A.store(duration as u32, Ordering::Release);
         } else {
-            DUTY_B.store(0, Ordering::Release);
+            DURATION_B.store(duration as u32, Ordering::Release);
         }
     }
 }
