@@ -166,37 +166,41 @@ async fn main(spawner: Spawner) {
         }*/
         let duration_a = DURATION_A.load(Ordering::Acquire);
         let duration_b = DURATION_B.load(Ordering::Acquire);
-        
+
         // Motor A
-        if duration_a > 1_950 {
+        if !(900..=2100).contains(&duration_a) {
+            DUTY_A.store(0, Ordering::Release);
+        } else if duration_a > 1_950 {
             DUTY_A.store(100, Ordering::Release);
         } else if duration_a < 1_050 {
             DUTY_A.store(-100, Ordering::Release);
-        } else if (1_450 < duration_a) & (duration_a < 1_550) {
+        } else if (1_450 < duration_a) && (duration_a < 1_550) {
             DUTY_A.store(0, Ordering::Release);
-        } else if duration_a < 1_425 { 
+        } else if duration_a < 1_425 {
             DUTY_A.store(-(100-((duration_a - 1000)/5) as i16), Ordering::Release);
         } else if duration_a > 1_575 {
-            DUTY_A.store((100-((2000-duration_a)/5)) as i16, Ordering::Release);
+            DUTY_A.store((100 - ((2000 - duration_a) / 5)) as i16, Ordering::Release);
         } else {
             DUTY_A.store(0, Ordering::Release);
         }
-        
+
         // Motor B
-        if duration_b > 1_950 {
+        if !(900..=2100).contains(&duration_b) {
+            DUTY_B.store(0, Ordering::Release);
+        } else if duration_b > 1_950 {
             DUTY_B.store(100, Ordering::Release);
         } else if duration_b < 1_050 {
             DUTY_B.store(-100, Ordering::Release);
-        } else if (1_450 < duration_b) & (duration_b < 1_550) {
+        } else if (1_450 < duration_b) && (duration_b < 1_550) {
             DUTY_B.store(0, Ordering::Release);
-        } else if duration_b < 1_425 { 
+        } else if duration_b < 1_425 {
             DUTY_B.store(-(100-((duration_b - 1000)/5) as i16), Ordering::Release);
         } else if duration_b > 1_575 {
             DUTY_B.store((100-((2000-duration_b)/5)) as i16, Ordering::Release);
         } else {
             DUTY_B.store(0, Ordering::Release);
         }
-        
+
         set_motor_duty(&mut pwm_a, 'a', DUTY_A.load(Ordering::Acquire));
         set_motor_duty(&mut pwm_b, 'b', DUTY_B.load(Ordering::Acquire));
         Timer::after_millis(50).await;
