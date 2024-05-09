@@ -92,8 +92,10 @@ async fn main(spawner: Spawner) {
     s.clear();
     
     spawner.spawn(blinky(p.PC13.degrade())).unwrap();
-    spawner.spawn(remote_ch(p.PA0.degrade(), p.EXTI0.degrade(), 'a')).unwrap();
-    spawner.spawn(remote_ch(p.PA1.degrade(), p.EXTI1.degrade(), 'b')).unwrap();
+    spawner.spawn(remote_ch_1(p.PA2.degrade(), p.EXTI2.degrade(), 'a')).unwrap();
+    Timer::after_millis(50).await;
+    spawner.spawn(remote_ch_2(p.PA3.degrade(), p.EXTI3.degrade(), 'b')).unwrap();
+    Timer::after_millis(10).await;
     spawner.spawn(print_durations()).unwrap();
     
     enable_motor(&mut pwm_a, 'a');
@@ -162,6 +164,39 @@ async fn main(spawner: Spawner) {
             // unwrap!(usart.write(&backspace).await);
             unwrap!(usart.write(&msg).await);
         }*/
+        let duration_a = DURATION_A.load(Ordering::Acquire);
+        let duration_b = DURATION_B.load(Ordering::Acquire);
+        
+        // Motor A
+        if duration_a > 1_950 {
+            DUTY_A.store(100, Ordering::Release);
+        } else if duration_a < 1_050 {
+            DUTY_A.store(-100, Ordering::Release);
+        } else if (1_450 < duration_a) & (duration_a < 1_550) {
+            DUTY_A.store(0, Ordering::Release);
+        } else if duration_a < 1_425 { 
+            DUTY_A.store(-(100-((duration_a - 1000)/5) as i16), Ordering::Release);
+        } else if duration_a > 1_575 {
+            DUTY_A.store((100-((2000-duration_a)/5)) as i16, Ordering::Release);
+        } else {
+            DUTY_A.store(0, Ordering::Release);
+        }
+        
+        // Motor B
+        if duration_b > 1_950 {
+            DUTY_B.store(100, Ordering::Release);
+        } else if duration_b < 1_050 {
+            DUTY_B.store(-100, Ordering::Release);
+        } else if (1_450 < duration_b) & (duration_b < 1_550) {
+            DUTY_B.store(0, Ordering::Release);
+        } else if duration_b < 1_425 { 
+            DUTY_B.store(-(100-((duration_b - 1000)/5) as i16), Ordering::Release);
+        } else if duration_b > 1_575 {
+            DUTY_B.store((100-((2000-duration_b)/5)) as i16, Ordering::Release);
+        } else {
+            DUTY_B.store(0, Ordering::Release);
+        }
+        
         set_motor_duty(&mut pwm_a, 'a', DUTY_A.load(Ordering::Acquire));
         set_motor_duty(&mut pwm_b, 'b', DUTY_B.load(Ordering::Acquire));
         Timer::after_millis(50).await;
@@ -173,12 +208,29 @@ async fn print_durations() {
     loop {
         info!("Duration A: {} us", DURATION_A.load(Ordering::Acquire));
         info!("Duration B: {} us", DURATION_B.load(Ordering::Acquire));
-        Timer::after_secs(2).await;
+        Timer::after_millis(200).await;
     }
 }
 
 #[embassy_executor::task]
-async fn remote_ch(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
+async fn remote_ch_1(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
+    let pin = Input::new(pin, Pull::None);
+    let mut pin = ExtiInput::new(pin, exti_ch);
+    loop {
+        pin.wait_for_rising_edge().await;
+        let inst = Instant::now();
+        pin.wait_for_falling_edge().await;
+        let duration = Instant::checked_duration_since(&Instant::now(), inst).unwrap().as_micros();
+        if motor == 'a' {
+            DURATION_A.store(duration as u32, Ordering::Release);
+        } else {
+            DURATION_B.store(duration as u32, Ordering::Release);
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn remote_ch_2(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     let pin = Input::new(pin, Pull::None);
     let mut pin = ExtiInput::new(pin, exti_ch);
     loop {
@@ -251,8 +303,8 @@ fn set_motor_duty(pwm: &mut SimplePwm<TIM1>, motor: char, duty: i16) {
         _ => [Channel::Ch1, Channel::Ch2], // TODO: Return an error instead of assuming motor a by default
     };
 
-    info!("Motor: {}", motor);
-    info!("Clamped Duty: {}", clamped_duty);
+    // info!("Motor: {}", motor);
+    // info!("Clamped Duty: {}", clamped_duty);
 
     if duty == 0 {
         pwm.set_duty(channels[0], 0);
