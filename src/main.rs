@@ -2,6 +2,12 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+//! Input capture of a PWM positive duty width to H-bridge motor driver
+//! 
+//! - Read two channels of a wireless remote that outputs positive pulse widths of 1ms to 2ms
+//! - Control two motors (H-bridge) with the remote signals
+
+
 // mod motor;
 
 use defmt::*; // if info!() or other debug macros are used
@@ -23,9 +29,11 @@ use {defmt_rtt as _, panic_probe as _};
 
 use talc::*;
 
+/// Size of the heap in bytes
 static mut ARENA: [u8; 10000] = [0; 10000];
 
 #[global_allocator]
+/// Global allocator for the heap
 static ALLOCATOR: Talck<spin::Mutex<()>, ClaimOnOom> = Talc::new(unsafe {
     // if we're in a hosted environment, the Rust runtime may allocate before
     // main() is called, so we need to initialize the arena automatically
@@ -43,21 +51,25 @@ use core::sync::atomic::AtomicI16;
 use embassy_stm32::exti::{AnyChannel, ExtiInput};
 use embassy_stm32::exti::Channel as ExtiChannel; // to avoid confusion with the PWM Channel
 
+/// Percentage duty cycle for motor A, -100 to +100
 static DUTY_A: AtomicI16 = AtomicI16::new(0);
+/// Percentage duty cycle for motor B, -100 to +100
 static DUTY_B: AtomicI16 = AtomicI16::new(0);
 
 use core::sync::atomic::AtomicU32;
+/// Positive pulse duration for channel A of remote in microseconds
 static DURATION_A: AtomicU32 = AtomicU32::new(0);
+/// Positive pulse duration for channel B of remote in microseconds
 static DURATION_B: AtomicU32 = AtomicU32::new(0);
 
-
+///Bind the USART1 interrupt to the USART1 peripheral
 bind_interrupts!(struct Irqs {
     USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
 
-#[embassy_executor::main]
 /// Main function, blinks an LED for 200ms on, 300ms off, and prints the current loop number to the console.
-async fn main(spawner: Spawner) {
+#[embassy_executor::main]
+pub(crate) async fn main(spawner: Spawner) {
     // Hardware objects
     let p = embassy_stm32::init(Default::default());
 
@@ -207,6 +219,7 @@ async fn main(spawner: Spawner) {
     }
 }
 
+/// Output the durations of the remote signals to the console
 #[embassy_executor::task]
 async fn print_durations() {
     loop {
@@ -216,6 +229,7 @@ async fn print_durations() {
     }
 }
 
+/// Task to read the remote channel 1 signal
 #[embassy_executor::task]
 async fn remote_ch_1(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     let pin = Input::new(pin, Pull::None);
@@ -233,6 +247,7 @@ async fn remote_ch_1(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     }
 }
 
+/// Task to read the remote channel 2 signal
 #[embassy_executor::task]
 async fn remote_ch_2(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     let pin = Input::new(pin, Pull::None);
@@ -250,6 +265,7 @@ async fn remote_ch_2(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     }
 }
 
+/// Task to blink the on-board LED at a speed proportional to motor speed
 #[embassy_executor::task]
 async fn blinky(pin: AnyPin) {
     let mut led = Output::new(pin, Level::Low, Speed::Low);
@@ -274,6 +290,7 @@ async fn blinky(pin: AnyPin) {
 
 
 // TODO: Put these in the motor.rs file
+/// Enable a motor by enabling the PWM channels
 fn enable_motor(pwm: &mut SimplePwm<TIM1>, motor: char) {
     let channels = match motor {
         'a' => [Channel::Ch1, Channel::Ch2],
@@ -285,6 +302,7 @@ fn enable_motor(pwm: &mut SimplePwm<TIM1>, motor: char) {
     pwm.enable(channels[1]);
 }
 
+/// Disable a motor by disabling the PWM channels
 fn disable_motor(pwm: &mut SimplePwm<TIM1>, motor: char) {
     let channels = match motor {
         'a' => [Channel::Ch1, Channel::Ch2],
@@ -297,6 +315,7 @@ fn disable_motor(pwm: &mut SimplePwm<TIM1>, motor: char) {
     set_motor_duty(pwm, motor, 0);
 }
 
+/// Set the duty cycle of a motor
 fn set_motor_duty(pwm: &mut SimplePwm<TIM1>, motor: char, duty: i16) {
     let clamped_duty = duty.clamp(-100, 100) as i32;
     let max = pwm.get_max_duty() as u32;

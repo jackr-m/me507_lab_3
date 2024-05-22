@@ -326,9 +326,34 @@
 <a href="#326" id="326">326</a>
 <a href="#327" id="327">327</a>
 <a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
 </pre></div><pre class="rust"><code><span class="attr">#![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+
+</span><span class="doccomment">//! Input capture of a PWM positive duty width to H-bridge motor driver
+//! 
+//! - Read two channels of a wireless remote that outputs positive pulse widths of 1ms to 2ms
+//! - Control two motors (H-bridge) with the remote signals
+
 
 </span><span class="comment">// mod motor;
 
@@ -351,9 +376,11 @@
 
 <span class="kw">use </span>talc::<span class="kw-2">*</span>;
 
-<span class="kw">static </span><span class="kw-2">mut </span>ARENA: [u8; <span class="number">10000</span>] = [<span class="number">0</span>; <span class="number">10000</span>];
+<span class="doccomment">/// Size of the heap in bytes
+</span><span class="kw">static </span><span class="kw-2">mut </span>ARENA: [u8; <span class="number">10000</span>] = [<span class="number">0</span>; <span class="number">10000</span>];
 
 <span class="attr">#[global_allocator]
+</span><span class="doccomment">/// Global allocator for the heap
 </span><span class="kw">static </span>ALLOCATOR: Talck&lt;spin::Mutex&lt;()&gt;, ClaimOnOom&gt; = Talc::new(<span class="kw">unsafe </span>{
     <span class="comment">// if we're in a hosted environment, the Rust runtime may allocate before
     // main() is called, so we need to initialize the arena automatically
@@ -371,21 +398,25 @@
 <span class="kw">use </span>embassy_stm32::exti::{AnyChannel, ExtiInput};
 <span class="kw">use </span>embassy_stm32::exti::Channel <span class="kw">as </span>ExtiChannel; <span class="comment">// to avoid confusion with the PWM Channel
 
+</span><span class="doccomment">/// Percentage duty cycle for motor A, -100 to +100
 </span><span class="kw">static </span>DUTY_A: AtomicI16 = AtomicI16::new(<span class="number">0</span>);
-<span class="kw">static </span>DUTY_B: AtomicI16 = AtomicI16::new(<span class="number">0</span>);
+<span class="doccomment">/// Percentage duty cycle for motor B, -100 to +100
+</span><span class="kw">static </span>DUTY_B: AtomicI16 = AtomicI16::new(<span class="number">0</span>);
 
 <span class="kw">use </span>core::sync::atomic::AtomicU32;
-<span class="kw">static </span>DURATION_A: AtomicU32 = AtomicU32::new(<span class="number">0</span>);
-<span class="kw">static </span>DURATION_B: AtomicU32 = AtomicU32::new(<span class="number">0</span>);
+<span class="doccomment">/// Positive pulse duration for channel A of remote in microseconds
+</span><span class="kw">static </span>DURATION_A: AtomicU32 = AtomicU32::new(<span class="number">0</span>);
+<span class="doccomment">/// Positive pulse duration for channel B of remote in microseconds
+</span><span class="kw">static </span>DURATION_B: AtomicU32 = AtomicU32::new(<span class="number">0</span>);
 
-
-<span class="macro">bind_interrupts!</span>(<span class="kw">struct </span>Irqs {
+<span class="doccomment">///Bind the USART1 interrupt to the USART1 peripheral
+</span><span class="macro">bind_interrupts!</span>(<span class="kw">struct </span>Irqs {
     USART1 =&gt; usart::InterruptHandler&lt;peripherals::USART1&gt;;
 });
 
-<span class="attr">#[embassy_executor::main]
-</span><span class="doccomment">/// Main function, blinks an LED for 200ms on, 300ms off, and prints the current loop number to the console.
-</span><span class="kw">async fn </span>main(spawner: Spawner) {
+<span class="doccomment">/// Main function, blinks an LED for 200ms on, 300ms off, and prints the current loop number to the console.
+</span><span class="attr">#[embassy_executor::main]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>main(spawner: Spawner) {
     <span class="comment">// Hardware objects
     </span><span class="kw">let </span>p = embassy_stm32::init(Default::default());
 
@@ -535,7 +566,8 @@
     }
 }
 
-<span class="attr">#[embassy_executor::task]
+<span class="doccomment">/// Output the durations of the remote signals to the console
+</span><span class="attr">#[embassy_executor::task]
 </span><span class="kw">async fn </span>print_durations() {
     <span class="kw">loop </span>{
         <span class="macro">info!</span>(<span class="string">"Duration A: {} us"</span>, DURATION_A.load(Ordering::Acquire));
@@ -544,7 +576,8 @@
     }
 }
 
-<span class="attr">#[embassy_executor::task]
+<span class="doccomment">/// Task to read the remote channel 1 signal
+</span><span class="attr">#[embassy_executor::task]
 </span><span class="kw">async fn </span>remote_ch_1(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     <span class="kw">let </span>pin = Input::new(pin, Pull::None);
     <span class="kw">let </span><span class="kw-2">mut </span>pin = ExtiInput::new(pin, exti_ch);
@@ -561,7 +594,8 @@
     }
 }
 
-<span class="attr">#[embassy_executor::task]
+<span class="doccomment">/// Task to read the remote channel 2 signal
+</span><span class="attr">#[embassy_executor::task]
 </span><span class="kw">async fn </span>remote_ch_2(pin: AnyPin, exti_ch: AnyChannel, motor: char) {
     <span class="kw">let </span>pin = Input::new(pin, Pull::None);
     <span class="kw">let </span><span class="kw-2">mut </span>pin = ExtiInput::new(pin, exti_ch);
@@ -578,7 +612,8 @@
     }
 }
 
-<span class="attr">#[embassy_executor::task]
+<span class="doccomment">/// Task to blink the on-board LED at a speed proportional to motor speed
+</span><span class="attr">#[embassy_executor::task]
 </span><span class="kw">async fn </span>blinky(pin: AnyPin) {
     <span class="kw">let </span><span class="kw-2">mut </span>led = Output::new(pin, Level::Low, Speed::Low);
 
@@ -602,6 +637,7 @@
 
 
 <span class="comment">// TODO: Put these in the motor.rs file
+</span><span class="doccomment">/// Enable a motor by enabling the PWM channels
 </span><span class="kw">fn </span>enable_motor(pwm: <span class="kw-2">&amp;mut </span>SimplePwm&lt;TIM1&gt;, motor: char) {
     <span class="kw">let </span>channels = <span class="kw">match </span>motor {
         <span class="string">'a' </span>=&gt; [Channel::Ch1, Channel::Ch2],
@@ -613,7 +649,8 @@
     pwm.enable(channels[<span class="number">1</span>]);
 }
 
-<span class="kw">fn </span>disable_motor(pwm: <span class="kw-2">&amp;mut </span>SimplePwm&lt;TIM1&gt;, motor: char) {
+<span class="doccomment">/// Disable a motor by disabling the PWM channels
+</span><span class="kw">fn </span>disable_motor(pwm: <span class="kw-2">&amp;mut </span>SimplePwm&lt;TIM1&gt;, motor: char) {
     <span class="kw">let </span>channels = <span class="kw">match </span>motor {
         <span class="string">'a' </span>=&gt; [Channel::Ch1, Channel::Ch2],
         <span class="string">'b' </span>=&gt; [Channel::Ch3, Channel::Ch4],
@@ -625,7 +662,8 @@
     set_motor_duty(pwm, motor, <span class="number">0</span>);
 }
 
-<span class="kw">fn </span>set_motor_duty(pwm: <span class="kw-2">&amp;mut </span>SimplePwm&lt;TIM1&gt;, motor: char, duty: i16) {
+<span class="doccomment">/// Set the duty cycle of a motor
+</span><span class="kw">fn </span>set_motor_duty(pwm: <span class="kw-2">&amp;mut </span>SimplePwm&lt;TIM1&gt;, motor: char, duty: i16) {
     <span class="kw">let </span>clamped_duty = duty.clamp(-<span class="number">100</span>, <span class="number">100</span>) <span class="kw">as </span>i32;
     <span class="kw">let </span>max = pwm.get_max_duty() <span class="kw">as </span>u32;
 

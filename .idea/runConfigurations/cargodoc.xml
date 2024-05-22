@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="cargodoc" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="doc --no-deps --document-private-items --release --target-dir docs/ --open" />
+    <option name="command" value="doc --no-deps --lib --open --bin me507_lab_3 --document-private-items --release --target-dir docs/" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
