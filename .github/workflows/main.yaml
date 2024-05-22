@@ -1,4 +1,4 @@
-name: Deploy Sphinx documentation to Pages
+name: Deploy RustDocs to Pages
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
         uses: actions/upload-pages-artifact@v2
         with:
           # Upload entire repository
-          path: './docs/thumbv7em-none-eabihf/doc/me507_lab_3'
+          path: './docs/thumbv7em-none-eabihf/doc'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v3
