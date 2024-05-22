@@ -1,0 +1,1 @@
+searchState.loadedDescShard("me507_lab_3", 0, "Returns the argument unchanged.\nCalls <code>U::from(self)</code>.")
